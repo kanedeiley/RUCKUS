@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import Phaser from "phaser";
+import { createClient } from "@/lib/supabase/client";
 import type { GameHostViewProps } from "@/lib/game-engine/types";
 import type { HeistState, AvatarState } from "./types";
 
@@ -9,10 +10,83 @@ type PhaserAvatarSprite = Phaser.Physics.Arcade.Sprite & {
   nickname: Phaser.GameObjects.Text;
 };
 
-interface AvatarInput {
-  playerId: string;
-  action: "JUMP" | "DASH" | "INTERACT";
-  direction?: "LEFT" | "RIGHT";
+class GameScene extends Phaser.Scene {
+  private sprites: Map<string, PhaserAvatarSprite> = new Map();
+  private avatarState: Record<string, AvatarState> = {};
+
+  constructor() {
+    super({ key: "HeistScene" });
+  }
+
+  create() {
+    const graphics = this.make.graphics({ x: 0, y: 0 }, false);
+    graphics.fillStyle(0x222222, 1);
+    graphics.fillRect(0, 0, 1024, 600);
+    graphics.generateTexture("background", 1024, 600);
+    graphics.destroy();
+
+    this.add.image(512, 300, "background");
+    this.physics.world.setBounds(0, 0, 1024, 600);
+  }
+
+  update() {
+    this.sprites.forEach((sprite) => {
+      const body = sprite.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        body.setDrag(0.95);
+      }
+      sprite.nickname.x = sprite.x;
+      sprite.nickname.y = sprite.y - 40;
+    });
+  }
+
+  updateAvatar(playerId: string, avatar: AvatarState) {
+    let sprite = this.sprites.get(playerId);
+
+    if (!sprite) {
+      sprite = this.createAvatarSprite(playerId, avatar);
+    }
+
+    sprite.setPosition(avatar.x, avatar.y);
+    const body = sprite.body as Phaser.Physics.Arcade.Body;
+    if (body) {
+      body.setVelocity(avatar.vx, avatar.vy);
+    }
+  }
+
+  private createAvatarSprite(
+    playerId: string,
+    avatar: AvatarState
+  ): PhaserAvatarSprite {
+    const textureKey = `avatar-${playerId}`;
+
+    if (!this.textures.exists(textureKey)) {
+      const graphics = this.make.graphics({ x: 0, y: 0 }, false);
+      graphics.fillStyle(parseInt(avatar.color.slice(1), 16), 1);
+      graphics.fillRect(0, 0, 40, 40);
+      graphics.generateTexture(textureKey, 40, 40);
+      graphics.destroy();
+    }
+
+    const sprite = this.physics.add.sprite(
+      avatar.x,
+      avatar.y,
+      textureKey
+    ) as PhaserAvatarSprite;
+
+    sprite.setBounce(0.2);
+    sprite.setCollideWorldBounds(true);
+
+    const text = this.add.text(avatar.x, avatar.y - 40, avatar.nickname, {
+      fontSize: "12px",
+      color: "#ffffff",
+    }) as Phaser.GameObjects.Text;
+
+    sprite.nickname = text;
+    this.sprites.set(playerId, sprite);
+
+    return sprite;
+  }
 }
 
 export function HostView({
@@ -21,9 +95,8 @@ export function HostView({
   state,
 }: GameHostViewProps<HeistState>) {
   const gameRef = useRef<Phaser.Game | null>(null);
-  const sceneRef = useRef<Phaser.Scene | null>(null);
-  const spritesRef = useRef<Map<string, PhaserAvatarSprite>>(new Map());
-  const inputQueueRef = useRef<AvatarInput[]>([]);
+  const sceneRef = useRef<GameScene | null>(null);
+  const glitchTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const config: Phaser.Types.Core.GameConfig = {
@@ -33,137 +106,64 @@ export function HostView({
       physics: {
         default: "arcade",
         arcade: {
-          gravity: { y: 800 },
+          gravity: { x: 0, y: 800 },
           debug: false,
         },
       },
-      scene: {
-        init: (scene) => {
-          sceneRef.current = scene;
-        },
-        create: (scene) => {
-          const graphics = scene.make.graphics({ x: 0, y: 0 }, false);
-          graphics.fillStyle(0x222222, 1);
-          graphics.fillRect(0, 0, 1024, 600);
-          graphics.generateTexture("background", 1024, 600);
-          graphics.destroy();
-
-          scene.add.image(512, 300, "background");
-
-          Object.entries(state.avatars).forEach(([playerId, avatar]) => {
-            createAvatarSprite(scene, playerId, avatar);
-          });
-
-          scene.physics.world.setBounds(0, 0, 1024, 600);
-
-          if (scene.time.now % 30000 === 0) {
-            scheduleGlitchEvent(scene);
-          }
-        },
-        update: (scene) => {
-          const sprites = spritesRef.current;
-
-          sprites.forEach((sprite) => {
-            if (sprite.body) {
-              sprite.body.setDrag(0.95);
-              if (sprite.body.touching.down) {
-                sprite.body.setVelocityY(0);
-              }
-            }
-            sprite.nickname.x = sprite.x;
-            sprite.nickname.y = sprite.y - 40;
-          });
-
-          while (inputQueueRef.current.length > 0) {
-            const input = inputQueueRef.current.shift();
-            if (!input) continue;
-
-            const sprite = sprites.get(input.playerId);
-            if (!sprite || !sprite.body) continue;
-
-            switch (input.action) {
-              case "JUMP":
-                if (sprite.body.touching.down) {
-                  sprite.body.setVelocityY(-450);
-                }
-                break;
-              case "DASH": {
-                const dir = input.direction === "LEFT" ? -1 : 1;
-                sprite.body.setVelocityX(dir * 600);
-                break;
-              }
-              case "INTERACT":
-                sprite.body.setVelocityY(-200);
-                break;
-            }
-          }
-        },
-      },
+      scene: GameScene,
       parent: "phaser-container",
     };
 
     gameRef.current = new Phaser.Game(config);
 
-    const handleInputAction = (payload: AvatarInput) => {
-      inputQueueRef.current.push(payload);
-    };
-
-    window.addEventListener("avatarInput", (e: Event) => {
-      const event = e as CustomEvent;
-      handleInputAction(event.detail);
+    gameRef.current.events.once("ready", () => {
+      sceneRef.current = gameRef.current?.scene.getScene("HeistScene") as GameScene;
+      scheduleGlitch();
     });
 
     return () => {
-      window.removeEventListener("avatarInput", handleInputAction);
+      if (glitchTimerRef.current) {
+        clearTimeout(glitchTimerRef.current);
+      }
       gameRef.current?.destroy(true);
     };
+  }, [room.code]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    Object.entries(state.avatars).forEach(([playerId, avatar]) => {
+      scene.updateAvatar(playerId, avatar);
+    });
   }, [state.avatars]);
 
-  const createAvatarSprite = (
-    scene: Phaser.Scene,
-    playerId: string,
-    avatar: AvatarState
-  ) => {
-    const graphics = scene.make.graphics({ x: 0, y: 0 }, false);
-    graphics.fillStyle(parseInt(avatar.color.slice(1), 16), 1);
-    graphics.fillRect(0, 0, 40, 40);
-    graphics.generateTexture(`avatar-${playerId}`, 40, 40);
-    graphics.destroy();
-
-    const sprite = scene.physics.add.sprite(
-      avatar.x,
-      avatar.y,
-      `avatar-${playerId}`
-    ) as PhaserAvatarSprite;
-
-    sprite.setBounce(0.2);
-    sprite.setCollideWorldBounds(true);
-
-    const text = scene.add.text(avatar.x, avatar.y - 40, avatar.nickname, {
-      fontSize: "12px",
-      color: "#ffffff",
-    });
-
-    sprite.nickname = text;
-    spritesRef.current.set(playerId, sprite);
-  };
-
-  const scheduleGlitchEvent = (scene: Phaser.Scene) => {
-    scene.time.delayedCall(30000, () => {
-      const playerIds = Object.keys(spritesRef.current);
+  const scheduleGlitch = () => {
+    glitchTimerRef.current = setTimeout(async () => {
+      const playerIds = Object.keys(state.avatars);
       if (playerIds.length > 0) {
         const targetId = playerIds[Math.floor(Math.random() * playerIds.length)];
-        dispatchGlitchEvent(targetId);
+        await dispatchGlitchEvent(targetId);
       }
-      scheduleGlitchEvent(scene);
-    });
+      scheduleGlitch();
+    }, 30000);
   };
 
-  const dispatchGlitchEvent = (playerId: string) => {
-    const event = new CustomEvent("glitchEvent", {
-      detail: { playerId },
+  const dispatchGlitchEvent = async (playerId: string) => {
+    const supabase = createClient();
+    const actions = ["JUMP", "DASH", "INTERACT"] as const;
+
+    const mapping = {
+      buttonA: actions[Math.floor(Math.random() * actions.length)],
+      buttonB: actions[Math.floor(Math.random() * actions.length)],
+      buttonC: actions[Math.floor(Math.random() * actions.length)],
+    };
+
+    await supabase.channel(`room-${room.code}`).send({
+      type: "broadcast",
+      event: "GLITCH_EVENT",
+      payload: { playerId, mapping },
     });
-    window.dispatchEvent(event);
   };
 
   return (
