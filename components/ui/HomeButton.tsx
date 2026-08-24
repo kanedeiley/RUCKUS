@@ -13,7 +13,7 @@ export function HomeButton() {
   return (
     <Link
       href="/"
-      aria-label="Back to home"
+      aria-label="Back to Home"
       className="fixed left-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-xl border-2 border-surface-border bg-primary text-2xl text-primary-foreground shadow-[0_4px_0_0_var(--primary-shadow)] transition-[transform,box-shadow] active:translate-y-[4px] active:shadow-none"
     >
       <SmallLogo />
