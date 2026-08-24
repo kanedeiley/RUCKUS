@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRoomRealtime } from "@/lib/hooks/useRoomRealtime";
-import { usePresence } from "@/lib/hooks/usePresence";
+import { usePresence, HOST_PRESENCE_KEY } from "@/lib/hooks/usePresence";
 import { getGame } from "@/games/registry";
 import { toEnginePlayer, toEngineRoom } from "@/lib/game-engine/mappers";
 import { HostShell } from "./HostShell";
@@ -24,22 +24,36 @@ export function HostRoomController({ room: initialRoom, players: initialPlayers 
     initialRoom,
     initialPlayers
   );
-  const onlinePlayerIds = usePresence(room.id, null);
+  // The host tracks itself in presence (not as a player) so phones know,
+  // live, whether the host screen is still open — when it disappears for
+  // long enough, players send themselves home (see PlayerRoomController).
+  const hostPresence = useMemo(
+    () => ({ playerId: HOST_PRESENCE_KEY, displayName: "Host" }),
+    []
+  );
+  const onlinePlayerIds = usePresence(room.id, hostPresence);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const startGame = useCallback(async () => {
-    setStarting(true);
-    setError(null);
-    const res = await fetch(`/api/rooms/${room.code}/start`, { method: "POST" });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(body.error ?? "Could not start game");
-    } else {
-      applyRoomUpdate(body.room as RoomRow);
-    }
-    setStarting(false);
-  }, [room.code, applyRoomUpdate]);
+  const startGame = useCallback(
+    async (gameId: string) => {
+      setStarting(true);
+      setError(null);
+      const res = await fetch(`/api/rooms/${room.code}/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gameId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body.error ?? "Could not start game");
+      } else {
+        applyRoomUpdate(body.room as RoomRow);
+      }
+      setStarting(false);
+    },
+    [room.code, applyRoomUpdate]
+  );
 
   if (room.status === "waiting" || room.status === "starting") {
     return (

@@ -49,9 +49,9 @@ export async function POST(
     .select("*")
     .eq("room_id", room.id);
 
-  // Hardcoded until a game-selection screen exists — the platform doesn't
-  // otherwise know or care which game this is.
-  const gameId = "placeholder";
+  // Get gameId from request body, default to placeholder
+  const body = await _request.json().catch(() => ({}));
+  const gameId = body.gameId || "placeholder";
   const game = getGame(gameId);
 
   if (!game) {

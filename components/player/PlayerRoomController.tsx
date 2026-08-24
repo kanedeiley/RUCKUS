@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useRoomRealtime } from "@/lib/hooks/useRoomRealtime";
-import { usePresence } from "@/lib/hooks/usePresence";
+import { usePresence, HOST_PRESENCE_KEY } from "@/lib/hooks/usePresence";
 import { getGame } from "@/games/registry";
 import { toEnginePlayer, toEngineRoom } from "@/lib/game-engine/mappers";
 import { PlayerShell } from "./PlayerShell";
 import { PlayerLobby } from "./PlayerLobby";
 import type { RoomRow, PlayerRow } from "@/lib/types/database";
+
+// Leave once the host screen has been gone this long. Generous enough that
+// a host refresh (a few seconds of absence) never kicks anyone.
+const HOST_GONE_MS = 30_000;
 
 interface Props {
   room: RoomRow;
@@ -34,6 +39,26 @@ export function PlayerRoomController({
     [currentPlayer.id, currentPlayer.display_name]
   );
   const onlinePlayerIds = usePresence(room.id, self);
+  const router = useRouter();
+
+  // When the host screen's presence has been gone for HOST_GONE_MS, just
+  // leave — no server round trip, no room bookkeeping. The abandoned row
+  // gets deleted by the pg_cron job (migration 0003).
+  const hostOnline = onlinePlayerIds.has(HOST_PRESENCE_KEY);
+  const hostOnlineRef = useRef(hostOnline);
+  hostOnlineRef.current = hostOnline;
+
+  useEffect(() => {
+    let lastSeen = Date.now();
+    const id = setInterval(() => {
+      if (hostOnlineRef.current) {
+        lastSeen = Date.now();
+      } else if (Date.now() - lastSeen > HOST_GONE_MS) {
+        router.push("/");
+      }
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [router]);
 
   const sendAction = useCallback(
     async (action: { type: string } & Record<string, unknown>) => {

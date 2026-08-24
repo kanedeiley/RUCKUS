@@ -8,6 +8,11 @@ interface PresenceMeta {
   displayName: string;
 }
 
+// The host tracks itself under this reserved key (it's not a player id, so
+// it can never collide with one). Player clients check for it to know, live,
+// whether the host screen is still connected.
+export const HOST_PRESENCE_KEY = "__host__";
+
 // crypto.randomUUID() only exists in secure contexts (HTTPS, or localhost) —
 // it throws over plain HTTP on a LAN address, which is exactly how a host
 // laptop gets tested against phones on the same WiFi during development.
