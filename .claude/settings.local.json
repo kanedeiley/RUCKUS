@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --use-npm --turbopack)",
+      "Read(//private/tmp/**)",
+      "Bash(rm -rf ruckus-scaffold)",
+      "Bash(npx --yes create-next-app@latest ruckus-scaffold --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --use-npm --turbopack)",
+      "Bash(rm -rf .git)",
+      "Bash(rsync -a ./ /Users/kane/Desktop/Projects/Ruckus/)",
+      "Bash(ls -la && cat CLAUDE.md 2>&1 && rm -rf /tmp/ruckus-scaffold)"
+    ],
+    "additionalDirectories": [
+      "/private/tmp/ruckus-scaffold"
+    ]
+  }
+}
