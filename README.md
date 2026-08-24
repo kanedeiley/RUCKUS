@@ -1,4 +1,4 @@
-![Logo](./app/public/RUCKUS.svg)
+![Logo](./public/RUCKUS.svg)
 
 Party games for everyone. This repo is the multiplayer **platform** — rooms,
 players, connections, real-time sync, and a game-plugin contract — with one
