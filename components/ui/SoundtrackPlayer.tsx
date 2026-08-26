@@ -27,7 +27,23 @@ export function SoundtrackPlayer() {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
-    setPlaying(getLocalStorageItem(PLAYING_KEY, false));
+    if (!getLocalStorageItem(PLAYING_KEY, false)) return;
+
+    // A restored "on" preference still needs a real user gesture before
+    // the browser will allow audio with sound — wait for the first
+    // interaction anywhere on the page instead of requiring the visitor
+    // to find and click the toggle again.
+    const resume = () => {
+      window.removeEventListener("pointerdown", resume);
+      window.removeEventListener("keydown", resume);
+      setPlaying(true);
+    };
+    window.addEventListener("pointerdown", resume);
+    window.addEventListener("keydown", resume);
+    return () => {
+      window.removeEventListener("pointerdown", resume);
+      window.removeEventListener("keydown", resume);
+    };
   }, []);
 
   useEffect(() => {
