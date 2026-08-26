@@ -82,3 +82,23 @@ body {
     transform: translateX(90px);
   }
 }
+
+/*
+ * Wind sway for the GrassKnoll blades. Every blade uses this same
+ * animation with no per-blade delay, so the whole strip moves on one
+ * timeline — a gust passing through the grass, not blades wiggling
+ * independently.
+ */
+@theme {
+  --animate-sway: sway 2.6s ease-in-out infinite;
+}
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
