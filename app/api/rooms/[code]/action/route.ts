@@ -3,15 +3,27 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGame } from "@/games/registry";
 import { toEnginePlayer, toEngineRoom } from "@/lib/game-engine/mappers";
-import type { RoomRow } from "@/lib/types/database";
+import {
+  isPartyComplete,
+  parseSessionState,
+  pointsFromPlacements,
+  type CompletedGame,
+} from "@/lib/game-engine/session";
+import type { RoomRow, RoomStatus } from "@/lib/types/database";
 
 const MAX_CONFLICT_RETRIES = 5;
 
 // PLAYER_ACTION / PLAYER_SUBMITTED. The only path any game state mutation
 // takes: validate the caller has a player row in this room, hand their
-// action to the active game's reducer, persist the result, and apply any
-// score deltas atomically. A player can only ever submit for themselves —
-// ctx.playerId is derived from the authenticated session, never the body.
+// action to the active game's reducer, and persist the result. A player can
+// only ever submit for themselves — ctx.playerId is derived from the
+// authenticated session, never the body.
+//
+// GAME_ENDED is where the session layer takes over from the game: the
+// game's placements convert to party points (the only writes players.score
+// receives — in-game scores live in game_state), the game is appended to
+// session_state history, and the room moves to `finished` (single) or
+// `intermission` (party, host picks the next game).
 //
 // game_state is read-modify-written in application code (the reducer is a
 // plain TS function, not SQL, so it can't run inside one atomic statement).
@@ -89,8 +101,39 @@ export async function POST(
     });
 
     const nextVersion = room.game_state_version + 1;
-    const nextStatus = result.endGame ? "finished" : room.status;
-    const nextFinishedAt = result.endGame ? new Date().toISOString() : room.finished_at;
+    let nextStatus: RoomStatus = room.status;
+    let nextFinishedAt = room.finished_at;
+    let nextSessionState = room.session_state;
+    let pointsAwarded: Record<string, number> | null = null;
+
+    if (result.endGame) {
+      // Party points exist only in party mode — quick play games still
+      // report placements (the game's own view can show who won), but
+      // nothing accumulates on players.score.
+      pointsAwarded =
+        room.mode === "party" && result.placements
+          ? pointsFromPlacements(result.placements)
+          : {};
+      const completed: CompletedGame = {
+        gameId: room.game_id,
+        endedAt: new Date().toISOString(),
+        placements: result.placements,
+        pointsAwarded,
+      };
+      const session = parseSessionState(room.session_state);
+      const nextSession = {
+        ...session,
+        gamesPlayed: [...session.gamesPlayed, completed],
+      };
+      nextSessionState = nextSession;
+
+      if (room.mode === "party" && !isPartyComplete(nextSession)) {
+        nextStatus = "intermission";
+      } else {
+        nextStatus = "finished";
+        nextFinishedAt = completed.endedAt;
+      }
+    }
 
     const { error, count } = await admin
       .from("rooms")
@@ -100,6 +143,7 @@ export async function POST(
           game_state_version: nextVersion,
           status: nextStatus,
           finished_at: nextFinishedAt,
+          session_state: nextSessionState,
         },
         { count: "exact" }
       )
@@ -111,11 +155,18 @@ export async function POST(
     }
 
     if (count === 1) {
-      if (result.scoreDeltas) {
+      // Party points, applied exactly once — only after the guarded write
+      // landed, so a retried reducer run can never double-award.
+      if (pointsAwarded) {
         await Promise.all(
-          Object.entries(result.scoreDeltas).map(([playerId, delta]) =>
-            admin.rpc("increment_player_score", { p_player_id: playerId, p_delta: delta })
-          )
+          Object.entries(pointsAwarded)
+            .filter(([, points]) => points !== 0)
+            .map(([playerId, points]) =>
+              admin.rpc("increment_player_score", {
+                p_player_id: playerId,
+                p_delta: points,
+              })
+            )
         );
       }
 
@@ -125,6 +176,7 @@ export async function POST(
         game_state_version: nextVersion,
         status: nextStatus,
         finished_at: nextFinishedAt,
+        session_state: nextSessionState,
       };
 
       return NextResponse.json({ room: updatedRoom });

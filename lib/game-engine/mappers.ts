@@ -7,6 +7,7 @@ export function toEngineRoom(row: RoomRow): Room {
     code: row.code,
     hostId: row.host_id,
     status: row.status,
+    mode: row.mode,
     gameId: row.game_id,
     gameState: row.game_state,
     createdAt: row.created_at,

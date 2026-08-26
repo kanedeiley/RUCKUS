@@ -8,6 +8,7 @@ import { getGame } from "@/games/registry";
 import { toEnginePlayer, toEngineRoom } from "@/lib/game-engine/mappers";
 import { PlayerShell } from "./PlayerShell";
 import { PlayerLobby } from "./PlayerLobby";
+import { PlayerIntermission } from "./PlayerIntermission";
 import type { RoomRow, PlayerRow } from "@/lib/types/database";
 
 // Leave once the host screen has been gone this long. Generous enough that
@@ -88,6 +89,23 @@ export function PlayerRoomController({
           players={players}
           onlinePlayerIds={onlinePlayerIds}
           currentPlayerId={me.id}
+        />
+      </PlayerShell>
+    );
+  }
+
+  // Session-layer screens: between games in a party, and the party's end.
+  if (
+    room.status === "intermission" ||
+    (room.status === "finished" && room.mode === "party")
+  ) {
+    return (
+      <PlayerShell>
+        <PlayerIntermission
+          room={room}
+          players={players}
+          currentPlayerId={me.id}
+          final={room.status === "finished"}
         />
       </PlayerShell>
     );

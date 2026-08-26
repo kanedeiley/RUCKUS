@@ -5,17 +5,36 @@ import { RoomCodeBadge } from "@/components/ui/RoomCodeBadge";
 import { PlayerList } from "@/components/ui/PlayerList";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
+import { GamePicker } from "./GamePicker";
 import { gameRegistry } from "@/games/registry";
-import type { RoomRow, PlayerRow } from "@/lib/types/database";
+import { parseSessionState } from "@/lib/game-engine/session";
+import type { RoomRow, PlayerRow, RoomMode } from "@/lib/types/database";
 
 interface Props {
   room: RoomRow;
   players: PlayerRow[];
   onlinePlayerIds: Set<string>;
-  onStart: (gameId: string) => void;
+  onStart: (gameId: string, mode: RoomMode, plannedGames?: number) => void;
   starting: boolean;
   error: string | null;
 }
+
+const MODES: { id: RoomMode; name: string; blurb: string }[] = [
+  {
+    id: "party",
+    name: "Party",
+    blurb: "Play a lineup of games — placements earn points toward a final score.",
+  },
+  {
+    id: "single",
+    name: "Quick Play",
+    blurb: "One game and done.",
+  },
+];
+
+// undefined = "host's choice" — no fixed target, the host taps Finish
+// whenever they're ready to crown a winner.
+const GAME_COUNT_OPTIONS: (number | undefined)[] = [3, 5, 7, undefined];
 
 export function HostLobby({
   room,
@@ -26,7 +45,12 @@ export function HostLobby({
   error,
 }: Props) {
   const [selectedGame, setSelectedGame] = useState("placeholder");
-  const games = Object.values(gameRegistry);
+  // A room with history is a reopened quick-play lobby ("Back to Game
+  // Selection") — keep its mode instead of defaulting back to Party.
+  const [mode, setMode] = useState<RoomMode>(
+    parseSessionState(room.session_state).gamesPlayed.length > 0 ? room.mode : "party"
+  );
+  const [plannedGames, setPlannedGames] = useState<number | undefined>(5);
   const selectedGameObj = gameRegistry[selectedGame];
 
   const canStart =
@@ -58,35 +82,66 @@ export function HostLobby({
       </div>
 
       <div className="w-full max-w-md">
-        <p className="mb-4 text-sm uppercase tracking-widest text-muted">Select a game</p>
-        <div className="flex flex-col gap-2">
-          {games.map((game) => (
+        <p className="mb-4 text-sm uppercase tracking-widest text-muted">Mode</p>
+        <div className="grid grid-cols-2 gap-2">
+          {MODES.map((m) => (
             <button
-              key={game.id}
-              onClick={() => setSelectedGame(game.id)}
+              key={m.id}
+              onClick={() => setMode(m.id)}
               className={`rounded-lg border-2 p-4 text-left transition-colors ${
-                selectedGame === game.id
+                mode === m.id
                   ? "border-primary bg-primary/10"
                   : "border-surface-border bg-surface hover:border-primary/50"
               }`}
             >
-              <p className="font-bold">{game.name}</p>
-              <p className="text-xs text-muted">{game.description}</p>
-              <p className="mt-1 text-xs text-muted">
-                {game.minPlayers}-{game.maxPlayers} players
-              </p>
+              <p className="font-bold">{m.name}</p>
+              <p className="text-xs text-muted">{m.blurb}</p>
             </button>
           ))}
         </div>
       </div>
 
+      {mode === "party" && (
+        <div className="w-full max-w-md">
+          <p className="mb-4 text-sm uppercase tracking-widest text-muted">
+            How many games?
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            {GAME_COUNT_OPTIONS.map((count) => (
+              <button
+                key={count ?? "choice"}
+                onClick={() => setPlannedGames(count)}
+                className={`rounded-lg border-2 p-3 text-center transition-colors ${
+                  plannedGames === count
+                    ? "border-primary bg-primary/10"
+                    : "border-surface-border bg-surface hover:border-primary/50"
+                }`}
+              >
+                <p className="font-bold">{count ?? "Host's choice"}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="w-full max-w-md">
+        <p className="mb-4 text-sm uppercase tracking-widest text-muted">
+          {mode === "party" ? "First game" : "Select a game"}
+        </p>
+        <GamePicker
+          selectedGameId={selectedGame}
+          onSelect={setSelectedGame}
+          playerCount={players.length}
+        />
+      </div>
+
       <div className="flex flex-col items-center gap-3">
         <Button
           size="lg"
-          onClick={() => onStart(selectedGame)}
+          onClick={() => onStart(selectedGame, mode, mode === "party" ? plannedGames : undefined)}
           disabled={!canStart}
         >
-          {starting ? "Starting..." : "Start Game"}
+          {starting ? "Starting..." : mode === "party" ? "Start the Party" : "Start Game"}
         </Button>
         {!canStart && selectedGameObj && players.length < selectedGameObj.minPlayers && (
           <p className="text-sm text-danger">

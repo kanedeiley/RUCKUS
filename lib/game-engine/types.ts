@@ -1,6 +1,12 @@
 import type { ComponentType } from "react";
 
-export type RoomStatus = "waiting" | "starting" | "playing" | "finished";
+export type RoomStatus =
+  | "waiting"
+  | "starting"
+  | "playing"
+  | "intermission"
+  | "finished";
+export type RoomMode = "single" | "party";
 export type PlayerConnectionStatus = "connected" | "disconnected";
 
 export interface Room {
@@ -8,6 +14,7 @@ export interface Room {
   code: string;
   hostId: string;
   status: RoomStatus;
+  mode: RoomMode;
   gameId: string | null;
   gameState: unknown;
   createdAt: string;
@@ -65,10 +72,21 @@ export interface GameActionContext {
 
 export interface GameActionResult<TState> {
   state: TState;
-  /** playerId -> amount to add to players.score, applied atomically by the engine. */
-  scoreDeltas?: Record<string, number>;
-  /** Set true to move the room straight to `finished` after this action. */
+  /**
+   * Set true to end the game after this action. Where the room goes next is
+   * the session layer's call, not the game's: quick-play rooms move to
+   * `finished`, party rooms to `intermission`.
+   */
   endGame?: boolean;
+  /**
+   * Final standings, meaningful only alongside endGame: playerId -> rank
+   * (1-based, competition ranking — ties share a rank, e.g. a whole winning
+   * team at rank 1). The session layer converts ranks to party points and is
+   * the only writer of players.score; a game's own live scoreboard belongs
+   * in its game_state. Omit for games that end without a ranked result —
+   * they simply award no points.
+   */
+  placements?: Record<string, number>;
 }
 
 export interface GameHostViewProps<TState> {
