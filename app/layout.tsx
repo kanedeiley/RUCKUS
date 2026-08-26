@@ -27,6 +27,9 @@ const bungee = Bungee({
 export const metadata: Metadata = {
   title: "Ruckus",
   description: "Party games for everyone.",
+  icons: {
+    icon: "/RuckusLogoSmall.svg",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
