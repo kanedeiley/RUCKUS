@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
+import { SoundtrackPlayer } from "@/components/ui/SoundtrackPlayer";
 import { ensureAnonymousSession } from "@/lib/supabase/anon";
 
 export default function LandingPage() {
@@ -47,6 +48,8 @@ export default function LandingPage() {
       </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}
+
+      <SoundtrackPlayer />
     </main>
   );
 }
