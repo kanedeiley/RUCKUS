@@ -57,7 +57,9 @@ export async function POST(
     .maybeSingle();
 
   if (!existingPlayer) {
-    if (room.status !== "waiting") {
+    // Party intermissions accept latecomers — they start at 0 party points
+    // and are dealt into the next game the host starts.
+    if (room.status !== "waiting" && room.status !== "intermission") {
       return NextResponse.json(
         { error: "This game has already started." },
         { status: 409 }

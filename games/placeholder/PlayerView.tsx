@@ -23,6 +23,7 @@ const FLUSH_INTERVAL_MS = 150;
  */
 export function PlayerView({ player, state, sendAction }: GamePlayerViewProps<PlaceholderState>) {
   const confirmedTaps = state.taps[player.id] ?? 0;
+  const raceOver = Boolean(state.winnerId);
   const [pending, setPending] = useState(0);
   const pendingRef = useRef(0);
   const flushingRef = useRef(false);
@@ -37,8 +38,18 @@ export function PlayerView({ player, state, sendAction }: GamePlayerViewProps<Pl
     }
   }, [confirmedTaps]);
 
+  // Once someone wins, unconfirmed taps are dead — the server rejects
+  // actions after the game ends, so flushing them would just retry 409s on
+  // the interval forever. Drop them.
+  useEffect(() => {
+    if (raceOver) {
+      pendingRef.current = 0;
+      setPending(0);
+    }
+  }, [raceOver]);
+
   const flush = useCallback(async () => {
-    if (flushingRef.current || pendingRef.current === 0) return;
+    if (raceOver || flushingRef.current || pendingRef.current === 0) return;
     flushingRef.current = true;
     const count = pendingRef.current;
     try {
@@ -46,7 +57,7 @@ export function PlayerView({ player, state, sendAction }: GamePlayerViewProps<Pl
     } finally {
       flushingRef.current = false;
     }
-  }, [sendAction]);
+  }, [sendAction, raceOver]);
 
   useEffect(() => {
     const interval = setInterval(flush, FLUSH_INTERVAL_MS);
@@ -54,6 +65,7 @@ export function PlayerView({ player, state, sendAction }: GamePlayerViewProps<Pl
   }, [flush]);
 
   const handleTap = () => {
+    if (raceOver) return;
     pendingRef.current += 1;
     setPending(pendingRef.current);
     if (!flushingRef.current) flush();
@@ -62,11 +74,18 @@ export function PlayerView({ player, state, sendAction }: GamePlayerViewProps<Pl
   return (
     <div className="flex flex-col items-center gap-8 text-center">
       <div>
-        <p className="text-muted">Your taps</p>
+        <p className="text-muted">
+          {raceOver
+            ? state.winnerId === player.id
+              ? "You won the race!"
+              : "Race over!"
+            : `First to ${state.targetTaps}`}
+        </p>
         <p className="text-6xl font-black text-primary">{confirmedTaps + pending}</p>
       </div>
       <button
         onClick={handleTap}
+        disabled={raceOver}
         className="h-40 w-40 rounded-full border-2 border-surface-border bg-primary text-xl font-black uppercase tracking-wide text-primary-foreground shadow-[0_6px_0_0_var(--primary-shadow)] transition-[transform,box-shadow] active:translate-y-[6px] active:shadow-none"
       >
         Ruckus!

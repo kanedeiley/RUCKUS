@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   agentRules: false,
 
 
-  allowedDevOrigins: ['192.168.1.86'],
+  allowedDevOrigins: ['192.168.1.86', '192.168.4.169'],
 };
 
 export default nextConfig;

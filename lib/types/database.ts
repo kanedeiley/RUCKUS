@@ -2,7 +2,13 @@
 // Once the project is linked to a real Supabase instance, this can be
 // regenerated with `supabase gen types typescript --linked`.
 
-export type RoomStatus = "waiting" | "starting" | "playing" | "finished";
+export type RoomStatus =
+  | "waiting"
+  | "starting"
+  | "playing"
+  | "intermission"
+  | "finished";
+export type RoomMode = "single" | "party";
 export type PlayerConnectionStatus = "connected" | "disconnected";
 
 // `type`, not `interface` — GenericTable requires Row/Insert/Update to
@@ -13,9 +19,11 @@ export type RoomRow = {
   code: string;
   host_id: string;
   status: RoomStatus;
+  mode: RoomMode;
   game_id: string | null;
   game_state: Record<string, unknown>;
   game_state_version: number;
+  session_state: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   started_at: string | null;
@@ -57,6 +65,7 @@ export interface Database {
     Views: Record<string, never>;
     Enums: {
       room_status: RoomStatus;
+      room_mode: RoomMode;
       player_connection_status: PlayerConnectionStatus;
     };
     Functions: {
