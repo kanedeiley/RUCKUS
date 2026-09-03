@@ -1,0 +1,1 @@
+export { horseRacingGame } from "./game";
