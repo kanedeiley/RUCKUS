@@ -36,6 +36,11 @@ const MODES: { id: RoomMode; name: string; blurb: string }[] = [
 // whenever they're ready to crown a winner.
 const GAME_COUNT_OPTIONS: (number | undefined)[] = [3, 5, 7, undefined];
 
+// Purely a UI split, not a server-side one: the room stays "waiting" and
+// realtime keeps updating `players` the whole time, so someone joining with
+// the code mid-selection needs nothing special from us.
+type Step = "code" | "select";
+
 export function HostLobby({
   room,
   players,
@@ -44,6 +49,7 @@ export function HostLobby({
   starting,
   error,
 }: Props) {
+  const [step, setStep] = useState<Step>("code");
   const [selectedGame, setSelectedGame] = useState("placeholder");
   // A room with history is a reopened quick-play lobby ("Back to Game
   // Selection") — keep its mode instead of defaulting back to Party.
@@ -59,26 +65,51 @@ export function HostLobby({
     selectedGameObj &&
     players.length >= selectedGameObj.minPlayers;
 
-  return (
-    <div className="flex flex-col items-center gap-10 text-center">
-      <div>
-        <h1>
-          <Logo className="mx-auto h-8 w-auto" />
-        </h1>
-        <p className="mt-6 text-sm uppercase tracking-widest text-muted">Room code</p>
-        <RoomCodeBadge code={room.code} />
-        <p className="mt-4 text-muted">Join from your phone using this code</p>
-      </div>
+  if (step === "code") {
+    return (
+      <div className="flex flex-col items-center gap-10 text-center">
+        <div>
+          <h1>
+            <Logo className="mx-auto h-8 w-auto" />
+          </h1>
+          <p className="mt-6 text-sm uppercase tracking-widest text-muted">Room code</p>
+          <RoomCodeBadge code={room.code} />
+          <p className="mt-4 text-muted">Join from your phone using this code</p>
+        </div>
 
-      <div className="w-full">
-        <p className="mb-4 text-sm uppercase tracking-widest text-muted">
-          Players ({players.length})
-        </p>
-        {players.length > 0 ? (
-          <PlayerList players={players} onlinePlayerIds={onlinePlayerIds} variant="host" />
-        ) : (
-          <p className="text-muted">Waiting for players to join...</p>
-        )}
+        <div className="w-full">
+          <p className="mb-4 text-sm uppercase tracking-widest text-muted">
+            Players ({players.length})
+          </p>
+          {players.length > 0 ? (
+            <PlayerList players={players} onlinePlayerIds={onlinePlayerIds} variant="host" />
+          ) : (
+            <p className="text-muted">Waiting for players to join...</p>
+          )}
+        </div>
+
+        <Button size="lg" onClick={() => setStep("select")}>
+          Choose a Game
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-8 text-center">
+      <div className="flex w-full items-center justify-between">
+        <button
+          onClick={() => setStep("code")}
+          className="text-sm text-muted underline-offset-4 hover:underline"
+        >
+          &larr; Back
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs uppercase tracking-widest text-muted">
+            {players.length} player{players.length === 1 ? "" : "s"}
+          </span>
+          <RoomCodeBadge code={room.code} compact />
+        </div>
       </div>
 
       <div className="w-full max-w-md">
@@ -124,7 +155,7 @@ export function HostLobby({
         </div>
       )}
 
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-3xl">
         <p className="mb-4 text-sm uppercase tracking-widest text-muted">
           {mode === "party" ? "First game" : "Select a game"}
         </p>
